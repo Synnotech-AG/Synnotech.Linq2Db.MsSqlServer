@@ -20,9 +20,9 @@ namespace Synnotech.Linq2Db.MsSqlServer
     {
         /// <summary>
         /// Registers several Linq2Db types with the DI container, especially a <see cref="DataConnection" /> with a transient lifetime. The data connection
-        /// is instantiated with a singleton <see cref="LinqToDbConnectionOptions" /> which are created from <see cref="Linq2DbSettings" />. The latter are retrieved from
-        /// the <see cref="IConfiguration" /> instance (which should already be registered with the DI container) and registered as a singleton.
-        /// Then a <see cref="IDataProvider" /> using Microsoft.Data.SqlClient is created and registered as a singleton as well. The <paramref name="createMappings" />
+        /// is instantiated by passing a singleton instance of <see cref="LinqToDbConnectionOptions" /> which is created from <see cref="Linq2DbSettings" />.
+        /// The latter is also available as a singleton and retrieved from the <see cref="IConfiguration" /> instance (which should already be registered with the DI container).
+        /// Then a <see cref="IDataProvider" /> using Microsoft.Data.SqlClient internally is created and registered as a singleton as well. The <paramref name="createMappings" />
         /// delegate is applied to the mapping schema of the data provider.
         /// </summary>
         /// <param name="services">The collection that is used to register all necessary types with the DI container.</param>
@@ -62,7 +62,7 @@ namespace Synnotech.Linq2Db.MsSqlServer
 
         /// <summary>
         /// Creates the default <see cref="LinqToDbConnectionOptions" />. <paramref name="traceLevel" /> and <paramref name="loggerFactory" />
-        /// are optional but need to be set together if another value than <see cref="TraceLevel.Off" /> is used.
+        /// are optional but need to be set together if a level other than <see cref="TraceLevel.Off" /> is used.
         /// </summary>
         /// <param name="dataProvider">The Linq2Db data provider used to create database-specific queries.</param>
         /// <param name="connectionString">The connection string for the target database.</param>
