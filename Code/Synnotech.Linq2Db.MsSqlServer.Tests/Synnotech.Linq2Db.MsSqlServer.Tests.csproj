@@ -1,10 +1,18 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
         <TargetFramework>net5.0</TargetFramework>
         <IsPackable>false</IsPackable>
         <Nullable>enable</Nullable>
     </PropertyGroup>
+
+    <ItemGroup>
+      <None Remove="Database.sql" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <EmbeddedResource Include="Database.sql" />
+    </ItemGroup>
 
     <ItemGroup>
         <ProjectReference Include="..\Synnotech.Linq2Db.MsSqlServer\Synnotech.Linq2Db.MsSqlServer.csproj" />
@@ -15,9 +23,11 @@
             <PrivateAssets>all</PrivateAssets>
         </PackageReference>
         <PackageReference Include="Synnotech.Xunit" Version="1.1.0" />
+        <PackageReference Include="Synnotech.MsSqlServer" Version="1.0.0" />
         <PackageReference Include="FluentAssertions" Version="5.10.3" />
         <PackageReference Include="Xunit.SkippableFact" Version="1.4.13" />
         <PackageReference Include="Microsoft.Data.SqlClient" Version="2.1.2" />
+        <PackageReference Include="Light.EmbeddedResources" Version="1.1.0" />
     </ItemGroup>
 
     <ItemGroup>

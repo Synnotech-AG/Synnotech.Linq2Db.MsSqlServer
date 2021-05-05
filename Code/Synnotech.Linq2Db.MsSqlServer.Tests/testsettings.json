@@ -1,3 +1,4 @@
 {
-
+    "areIntegrationTestsEnabled": false,
+    "connectionString": "Server=(localdb)\\MsSqlLocalDB;Database=Synnotech-Linq2Db-MsSqlServer-IntegrationTests;Integrated Security=True"
 }
