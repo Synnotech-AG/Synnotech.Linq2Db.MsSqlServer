@@ -1,4 +1,5 @@
 ﻿using System.Threading.Tasks;
+using Light.EmbeddedResources;
 using Light.GuardClauses;
 using Light.GuardClauses.Exceptions;
 using Microsoft.Extensions.Configuration;
@@ -10,29 +11,30 @@ namespace Synnotech.Linq2Db.MsSqlServer.Tests
 {
     public abstract class BaseMsSqlIntegrationTest : IAsyncLifetime
     {
-        private bool AreIntegrationTestsEnabled => TestSettings.Configuration.GetValue<bool>(nameof(AreIntegrationTestsEnabled));
+        private bool AreDatabaseTestsEnabled => TestSettings.Configuration.GetValue<bool>("database:areTestsEnabled");
 
-        private string ConnectionString
+        protected string ConnectionString
         {
             get
             {
-                var connectionString = TestSettings.Configuration["connectionString"];
+                var connectionString = TestSettings.Configuration["database:connectionString"];
                 if (connectionString.IsNullOrWhiteSpace())
-                    throw new InvalidConfigurationException("You must set \"connectionString\" when \"areIntegrationTestsEnabled\" is set to true in testsettings.");
+                    throw new InvalidConfigurationException("You must set \"database:connectionString\" when \"database:areTestsEnabled\" is set to true in testsettings.");
                 return connectionString;
             }
         }
 
         public async Task InitializeAsync()
         {
-            if (!AreIntegrationTestsEnabled)
+            if (!AreDatabaseTestsEnabled)
                 return;
 
             await Database.DropAndCreateDatabaseAsync(ConnectionString);
+            await Database.ExecuteNonQueryAsync(ConnectionString, this.GetEmbeddedResource("Database.sql"));
         }
 
         public Task DisposeAsync() => Task.CompletedTask;
 
-        protected void SkipTestIfNecessary() => Skip.IfNot(AreIntegrationTestsEnabled);
+        protected void SkipTestIfNecessary() => Skip.IfNot(AreDatabaseTestsEnabled);
     }
 }

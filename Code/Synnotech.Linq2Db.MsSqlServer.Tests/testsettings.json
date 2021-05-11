@@ -1,4 +1,6 @@
 {
-    "areIntegrationTestsEnabled": false,
-    "connectionString": "Server=(localdb)\\MsSqlLocalDB;Database=Synnotech-Linq2Db-MsSqlServer-IntegrationTests;Integrated Security=True"
+    "database": {
+        "areTestsEnabled": false,
+        "connectionString": "Server=(localdb)\\MsSqlLocalDB;Database=Synnotech_Linq2Db_MsSqlServer_IntegrationTests;Integrated Security=True"
+    }
 }

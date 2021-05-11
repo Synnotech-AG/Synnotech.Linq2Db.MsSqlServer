@@ -7,14 +7,6 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <None Remove="Database.sql" />
-    </ItemGroup>
-
-    <ItemGroup>
-      <EmbeddedResource Include="Database.sql" />
-    </ItemGroup>
-
-    <ItemGroup>
         <ProjectReference Include="..\Synnotech.Linq2Db.MsSqlServer\Synnotech.Linq2Db.MsSqlServer.csproj" />
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.9.4" />
         <PackageReference Include="xunit" Version="2.4.1" />
@@ -23,10 +15,11 @@
             <PrivateAssets>all</PrivateAssets>
         </PackageReference>
         <PackageReference Include="Synnotech.Xunit" Version="1.1.0" />
-        <PackageReference Include="Synnotech.MsSqlServer" Version="1.0.0" />
+        <PackageReference Include="Synnotech.MsSqlServer" Version="1.1.0" />
         <PackageReference Include="FluentAssertions" Version="5.10.3" />
         <PackageReference Include="Xunit.SkippableFact" Version="1.4.13" />
         <PackageReference Include="Microsoft.Data.SqlClient" Version="2.1.2" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="5.0.1" />
         <PackageReference Include="Light.EmbeddedResources" Version="1.1.0" />
     </ItemGroup>
 
@@ -37,6 +30,7 @@
         <None Update="testsettings.Development.json" Condition="Exists('testsettings.Development.json')">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
+        <EmbeddedResource Include="Database.sql" />
     </ItemGroup>
 
 </Project>
