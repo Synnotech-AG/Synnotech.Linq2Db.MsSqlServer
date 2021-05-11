@@ -55,40 +55,21 @@ namespace Synnotech.Linq2Db.MsSqlServer
         internal IsolationLevel TransactionLevel { get; private set; }
 
         /// <summary>
-        /// Gets the value indicating whether <see cref="SaveChangesAsync" /> has been called.
+        /// Disposes the Linq2Db data connection. If <see cref="SaveChangesAsync" /> has not been called,
+        /// then the internal transaction will be rolled back implicitly by Linq2Db.
         /// </summary>
-        protected bool IsCommitted { get; private set; }
+        public void Dispose() => DataConnection.Dispose();
 
         /// <summary>
         /// Disposes the Linq2Db data connection. If <see cref="SaveChangesAsync" /> has not been called,
-        /// then the internal transaction will be rolled back.
+        /// then the internal transaction will be rolled back implicitly by Linq2Db.
         /// </summary>
-        public void Dispose()
-        {
-            if (!IsCommitted)
-                DataConnection.RollbackTransaction();
-            DataConnection.Dispose();
-        }
-
-        /// <summary>
-        /// Disposes the Linq2Db data connection. If <see cref="SaveChangesAsync" /> has not been called,
-        /// then the internal transaction will be rolled back.
-        /// </summary>
-        public async ValueTask DisposeAsync()
-        {
-            if (!IsCommitted)
-                await DataConnection.RollbackTransactionAsync();
-            await DataConnection.DisposeAsync();
-        }
+        public ValueTask DisposeAsync() => DataConnection.DisposeAsync();
 
         /// <summary>
         /// Commits the internal transaction.
         /// </summary>
-        public async Task SaveChangesAsync()
-        {
-            await DataConnection.CommitTransactionAsync();
-            IsCommitted = true;
-        }
+        public Task SaveChangesAsync() => DataConnection.CommitTransactionAsync();
 
         internal void SetDataConnection(TDataConnection dataConnection)
         {
