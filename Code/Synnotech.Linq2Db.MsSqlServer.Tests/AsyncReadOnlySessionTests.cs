@@ -25,11 +25,9 @@ namespace Synnotech.Linq2Db.MsSqlServer.Tests
         {
             SkipTestIfNecessary();
 
-            await using var session = new ServiceCollection().AddLinq2DbForSqlServer(DatabaseMappings.CreateMappings)
-                                                             .AddSingleton(TestSettings.Configuration)
-                                                             .AddTransient<EmployeeSession>()
-                                                             .BuildServiceProvider()
-                                                             .GetRequiredService<EmployeeSession>();
+            await using var session = PrepareContainer().AddTransient<EmployeeSession>()
+                                                        .BuildServiceProvider()
+                                                        .GetRequiredService<EmployeeSession>();
 
             var employees = await session.GetEmployeesAsync();
 

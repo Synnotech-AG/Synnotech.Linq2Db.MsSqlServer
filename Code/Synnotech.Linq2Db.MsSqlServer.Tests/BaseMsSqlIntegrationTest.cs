@@ -3,6 +3,7 @@ using Light.EmbeddedResources;
 using Light.GuardClauses;
 using Light.GuardClauses.Exceptions;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Synnotech.MsSqlServer;
 using Synnotech.Xunit;
 using Xunit;
@@ -36,5 +37,9 @@ namespace Synnotech.Linq2Db.MsSqlServer.Tests
         public Task DisposeAsync() => Task.CompletedTask;
 
         protected void SkipTestIfNecessary() => Skip.IfNot(AreDatabaseTestsEnabled);
+
+        protected IServiceCollection PrepareContainer() =>
+            new ServiceCollection().AddLinq2DbForSqlServer(DatabaseMappings.CreateMappings)
+                                   .AddSingleton(TestSettings.Configuration);
     }
 }
