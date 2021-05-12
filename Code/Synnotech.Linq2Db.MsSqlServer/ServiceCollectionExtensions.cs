@@ -7,6 +7,7 @@ using LinqToDB.Data;
 using LinqToDB.DataProvider;
 using LinqToDB.DataProvider.SqlServer;
 using LinqToDB.Mapping;
+using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -158,18 +159,11 @@ namespace Synnotech.Linq2Db.MsSqlServer
         /// </param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="services"/> is null.</exception>
         public static IServiceCollection AddAsyncSession<TAbstraction, TImplementation, TDataConnection>(this IServiceCollection services, bool registerFactoryDelegate = true)
-            where TImplementation : AsyncSession, TAbstraction, new()
+            where TImplementation : AsyncSession<TDataConnection>, TAbstraction, new()
             where TDataConnection : DataConnection
         {
             services.MustNotBeNull(nameof(services));
-            services.AddTransient<Task<TAbstraction>>(async container =>
-            {
-                var dataConnection = container.GetRequiredService<TDataConnection>();
-                var session = new TImplementation();
-                await dataConnection.BeginTransactionAsync(session.TransactionLevel);
-                session.SetDataConnection(dataConnection);
-                return session;
-            });
+            services.AddTransient(ResolveAsyncSession<TAbstraction, TImplementation, TDataConnection>);
             if (registerFactoryDelegate)
                 services.AddSingleton<Func<Task<TAbstraction>>>(container => container.GetRequiredService<Task<TAbstraction>>);
 
@@ -208,5 +202,43 @@ namespace Synnotech.Linq2Db.MsSqlServer
         public static IServiceCollection AddAsyncSession<TAbstraction, TImplementation>(this IServiceCollection services, bool registerFactoryDelegate = true)
             where TImplementation : AsyncSession, TAbstraction, new() =>
             services.AddAsyncSession<TAbstraction, TImplementation, DataConnection>(registerFactoryDelegate);
+
+        /// <summary>
+        /// Uses the DI container to resolve the specified session. The underlying Linq2Db data connection will be
+        /// opened asynchronously, a transaction is started, and afterwards, data connection is injected into the session.
+        /// </summary>
+        /// <typeparam name="TAbstraction">The interface that your session implements.</typeparam>
+        /// <typeparam name="TImplementation">The Linq2Db session implementation that performs the actual database I/O.</typeparam>
+        /// <typeparam name="TDataConnection">Your custom data connection subtype that you use in your solution.</typeparam>
+        /// <param name="container">The DI container that resolves the corresponding types.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="container"/> is null.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when <typeparamref name="TDataConnection"/> cannot be resolved via the container.</exception>
+        /// <exception cref="SqlException">Thrown when the underlying SQL connection cannot be opened or a transaction cannot be created.</exception>
+        public static async Task<TAbstraction> ResolveAsyncSession<TAbstraction, TImplementation, TDataConnection>(this IServiceProvider container)
+            where TImplementation : AsyncSession<TDataConnection>, TAbstraction, new()
+            where TDataConnection : DataConnection
+        {
+            container.MustNotBeNull(nameof(container));
+
+            var dataConnection = container.GetRequiredService<TDataConnection>();
+            var session = new TImplementation();
+            await dataConnection.BeginTransactionAsync(session.TransactionLevel);
+            session.SetDataConnection(dataConnection);
+            return session;
+        }
+
+        /// <summary>
+        /// Uses the DI container to resolve the specified session. The underlying Linq2Db data connection will be
+        /// opened asynchronously, a transaction is started, and afterwards, data connection is injected into the session.
+        /// </summary>
+        /// <typeparam name="TAbstraction">The interface that your session implements.</typeparam>
+        /// <typeparam name="TImplementation">The Linq2Db session implementation that performs the actual database I/O.</typeparam>
+        /// <param name="container">The DI container that resolves the corresponding types.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="container"/> is null.</exception>
+        /// <exception cref="InvalidOperationException">Thrown when the underlying data connection cannot be resolved via the container.</exception>
+        /// <exception cref="SqlException">Thrown when the underlying SQL connection cannot be opened or a transaction cannot be created.</exception>
+        public static Task<TAbstraction> ResolveAsyncSession<TAbstraction, TImplementation>(this IServiceProvider container)
+            where TImplementation : AsyncSession, TAbstraction, new() =>
+            ResolveAsyncSession<TAbstraction, TImplementation, DataConnection>(container);
     }
 }
