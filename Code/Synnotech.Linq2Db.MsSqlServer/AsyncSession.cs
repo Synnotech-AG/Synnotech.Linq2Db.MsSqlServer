@@ -14,7 +14,7 @@ namespace Synnotech.Linq2Db.MsSqlServer
     /// Disposing the session will implicitly roll-back the transaction if SaveChangesAsync was not called beforehand.
     /// Beware: you must not derive from this class and introduce other references to disposable objects.
     /// Only the <see cref="DataConnection" /> will be disposed.
-    /// To easily set each session up, take a look at <see cref="ServiceCollectionExtensions.AddAsyncSession{TAbstraction,TImplementation, TDataConnection}" />
+    /// To easily set each session up, take a look at <see cref="ServiceCollectionExtensions.AddSessionFactoryFor{TAbstraction,TImplementation,TDataConnection}" />
     /// and use the <see cref="AsyncSession{TDataConnection}(IsolationLevel)" /> constructor to define the transaction level (default is <see cref="IsolationLevel.Serializable" />.
     /// </summary>
     /// <typeparam name="TDataConnection">Your database context type that derives from <see cref="DataConnection" />.</typeparam>
@@ -27,7 +27,7 @@ namespace Synnotech.Linq2Db.MsSqlServer
         /// Initializes a new instance of <see cref="AsyncSession{TDataConnection}" />. Use this constructor if you want
         /// to pass the initialized data connection with an associated transaction directly from your subclass.
         /// We do not recommend calling this constructor in DI scenarios, instead use the other constructor
-        /// and use <see cref="ServiceCollectionExtensions.AddAsyncSession{TAbstraction,TImplementation,TDataConnection}" />
+        /// and use <see cref="ServiceCollectionExtensions.AddSessionFactoryFor{TAbstraction,TImplementation,TDataConnection}" />
         /// to register your session with the DI container.
         /// </summary>
         /// <param name="dataConnection">
@@ -39,7 +39,7 @@ namespace Synnotech.Linq2Db.MsSqlServer
 
         /// <summary>
         /// Initializes a new instance of <see cref="AsyncSession{TDataConnection}" />. Use this constructor
-        /// if you want to use the <see cref="ServiceCollectionExtensions.AddAsyncSession{TAbstraction,TImplementation,TDataConnection}" />
+        /// if you want to use the <see cref="ServiceCollectionExtensions.AddSessionFactoryFor{TAbstraction,TImplementation,TDataConnection}" />
         /// method to register your sessions with the DI container.
         /// </summary>
         /// <param name="transactionLevel">The transaction level that should be applied to the underlying transaction (optional). Defaults to <see cref="IsolationLevel.Serializable" />.</param>
@@ -86,7 +86,7 @@ namespace Synnotech.Linq2Db.MsSqlServer
     /// Disposing the session will implicitly roll-back the transaction if SaveChangesAsync was not called beforehand.
     /// Beware: you must not derive from this class and introduce other references to disposable objects.
     /// Only the <see cref="DataConnection" /> will be disposed.
-    /// To easily set each session up, take a look at <see cref="ServiceCollectionExtensions.AddAsyncSession{TAbstraction,TImplementation}" />
+    /// To easily set each session up, take a look at <see cref="ServiceCollectionExtensions.AddSessionFactoryFor{TAbstraction,TImplementation}" />
     /// and use the <see cref="AsyncSession(IsolationLevel)" /> constructor to define the transaction level (default is <see cref="IsolationLevel.Serializable" />.
     /// </summary>
     public abstract class AsyncSession : AsyncSession<DataConnection>
@@ -95,7 +95,7 @@ namespace Synnotech.Linq2Db.MsSqlServer
         /// Initializes a new instance of <see cref="AsyncSession" />. Use this constructor if you want
         /// to pass the initialized data connection with an associated transaction directly from your subclass.
         /// We do not recommend calling this constructor in DI scenarios, instead use the other constructor
-        /// and use <see cref="ServiceCollectionExtensions.AddAsyncSession{TAbstraction,TImplementation}" />
+        /// and use <see cref="ServiceCollectionExtensions.AddSessionFactoryFor{TAbstraction,TImplementation}" />
         /// to register your session with the DI container.
         /// </summary>
         /// <param name="dataConnection">
@@ -107,7 +107,7 @@ namespace Synnotech.Linq2Db.MsSqlServer
 
         /// <summary>
         /// Initializes a new instance of <see cref="AsyncSession" />. Use this constructor
-        /// if you want to use the <see cref="ServiceCollectionExtensions.AddAsyncSession{TAbstraction,TImplementation}" />
+        /// if you want to use the <see cref="ServiceCollectionExtensions.AddSessionFactoryFor{TAbstraction,TImplementation}" />
         /// method to register your sessions with the DI container.
         /// </summary>
         /// <param name="transactionLevel">The transaction level that should be applied to the underlying transaction (optional). Defaults to <see cref="IsolationLevel.Serializable" />.</param>

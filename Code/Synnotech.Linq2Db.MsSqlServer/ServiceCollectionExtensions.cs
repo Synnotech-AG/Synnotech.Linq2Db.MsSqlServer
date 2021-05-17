@@ -1,16 +1,15 @@
 ﻿using System;
 using System.Diagnostics;
-using System.Threading.Tasks;
 using Light.GuardClauses;
 using LinqToDB.Configuration;
 using LinqToDB.Data;
 using LinqToDB.DataProvider;
 using LinqToDB.DataProvider.SqlServer;
 using LinqToDB.Mapping;
-using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Synnotech.DatabaseAbstractions;
 
 namespace Synnotech.Linq2Db.MsSqlServer
 {
@@ -20,7 +19,7 @@ namespace Synnotech.Linq2Db.MsSqlServer
     public static class ServiceCollectionExtensions
     {
         /// <summary>
-        /// Registers several Linq2Db types with the DI container, especially a <see cref="DataConnection" /> with a transient lifetime. The data connection
+        /// Registers several Linq2Db types with the DI container, especially a <see cref="DataConnection" /> (using a transient lifetime by default). The data connection
         /// is instantiated by passing a singleton instance of <see cref="LinqToDbConnectionOptions" /> which is created from <see cref="Linq2DbSettings" />.
         /// The latter is also available as a singleton and retrieved from the <see cref="IConfiguration" /> instance (which should already be registered with the DI container).
         /// Then a <see cref="IDataProvider" /> using Microsoft.Data.SqlClient internally is created and registered as a singleton as well. The <paramref name="createMappings" />
@@ -31,10 +30,23 @@ namespace Synnotech.Linq2Db.MsSqlServer
         /// The delegate that manipulates the mapping schema of the data provider (optional). Alternatively, you could use the Linq2Db attributes to configure
         /// your model classes, but we strongly recommend that you use the Linq2Db <see cref="FluentMappingBuilder" /> to specify how model classes are mapped.
         /// </param>
+        /// <param name="dataConnectionLifetime">
+        /// The lifetime that is used for the data connection (optional). The default value is <see cref="ServiceLifetime.Transient" />. If you want to, you
+        /// can exchange it with <see cref="ServiceLifetime.Scoped" />.
+        /// </param>
+        /// <param name="registerFactoryDelegateForDataConnection">
+        /// The value indicating whether a <see cref="Func{DataConnection}" /> should also be registered with the DI container (optional). The default value is true.
+        /// You can set this value to false if you use a proper DI container like LightInject that offers function factories. https://www.lightinject.net/#function-factories
+        /// </param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> is null.</exception>
-        public static IServiceCollection AddLinq2DbForSqlServer(this IServiceCollection services, Action<MappingSchema>? createMappings = null) =>
-            services.MustNotBeNull(nameof(services))
-                    .AddSingleton(container => Linq2DbSettings.FromConfiguration(container.GetRequiredService<IConfiguration>()))
+        public static IServiceCollection AddLinq2DbForSqlServer(this IServiceCollection services,
+                                                                Action<MappingSchema>? createMappings = null,
+                                                                ServiceLifetime dataConnectionLifetime = ServiceLifetime.Transient,
+                                                                bool registerFactoryDelegateForDataConnection = true)
+        {
+            services.MustNotBeNull(nameof(services));
+
+            services.AddSingleton(container => Linq2DbSettings.FromConfiguration(container.GetRequiredService<IConfiguration>()))
                     .AddSingleton(container => CreateSqlServerDataProvider(container.GetRequiredService<Linq2DbSettings>().SqlServerVersion, createMappings))
                     .AddSingleton(container =>
                      {
@@ -44,7 +56,11 @@ namespace Synnotech.Linq2Db.MsSqlServer
                                                                settings.TraceLevel,
                                                                container.GetService<ILoggerFactory>());
                      })
-                    .AddTransient(container => new DataConnection(container.GetRequiredService<LinqToDbConnectionOptions>()));
+                    .Add(new ServiceDescriptor(typeof(DataConnection), container => new DataConnection(container.GetRequiredService<LinqToDbConnectionOptions>()), dataConnectionLifetime));
+            if (registerFactoryDelegateForDataConnection)
+                services.AddSingleton<Func<DataConnection>>(container => container.GetRequiredService<DataConnection>);
+            return services;
+        }
 
         /// <summary>
         /// Creates an <see cref="IDataProvider" /> that uses Microsoft.Data.SqlClient internally.
@@ -129,116 +145,73 @@ namespace Synnotech.Linq2Db.MsSqlServer
         }
 
         /// <summary>
-        /// Registers the specified session as a <see cref="Task{TAbstraction}" /> with a transient lifetime. When this dependency is resolved,
-        /// the session and a data connection will be instantiated, a transaction will be started asynchronously, and finally the data connection
-        /// is injected into the session. In your client code, you should request a Func&lt;Task&lt;TAbstraction>> so that you can instantiate, use, and
-        /// afterwards dispose a session:
+        /// Registers an <see cref="ISessionFactory{TAbstraction}" /> for the specified session. You can inject this session factory
+        /// into client code to resolve your session asynchronously. When resolved, a new data connection is created, a connection to
+        /// the target database is opened asynchronously, and a transaction is started. The data connection is then passed to your
+        /// custom session type. See <see cref="SessionFactory{TAbstraction,TImplementation,TDataConnection}" /> for details.
         /// <code>
         /// public class MySessionClient
         /// {
-        ///     public MySessionClient(Func&lt;Task&lt;IMySession>> createSessionAsync) =>
-        ///         CreateSessionAsync = createSessionAsync;
-        ///
-        ///     private Func&lt;Task&lt;IMySession>> CreateSessionAsync { get; }
-        ///
+        ///     public MySessionClient(ISessionFactory&lt;IMySession> sessionFactory) =>
+        ///         SessionFactory = sessionFactory;
+        /// 
+        ///     // IMySession must derive from IAsyncSession
+        ///     private ISessionFactory&lt;IMySession> SessionFactory { get; }
+        /// 
         ///     public async Task SomeMethod()
         ///     {
-        ///         await using var session = await CreateSessionAsync();
+        ///         await using var session = await SessionFactory.OpenSessionAsync();
         ///         // do something useful with your session
         ///     }
         /// }
         /// </code>
         /// </summary>
-        /// <typeparam name="TAbstraction">The interface that your session implements.</typeparam>
-        /// <typeparam name="TImplementation">The Linq2Db session implementation that performs the actual database I/O.</typeparam>
+        /// <typeparam name="TAbstraction">The interface that your session implements. It must implement <see cref="IAsyncSession" />.</typeparam>
+        /// <typeparam name="TImplementation">The Linq2Db session implementation that performs the actual database I/O. It must derive from <see cref="AsyncSession{TDataConnection}" />.</typeparam>
         /// <typeparam name="TDataConnection">Your custom data connection subtype that you use in your solution.</typeparam>
         /// <param name="services">The collection that holds all registrations for the DI container.</param>
-        /// <param name="registerFactoryDelegate">
-        /// The value indicating whether a factory delegate should be registered as a singleton. The default value is true. You should
-        /// set this to false if your DI container can support function factories out of the box, like e.g. LightInject (https://www.lightinject.net/#function-factories).
-        /// </param>
-        /// <exception cref="ArgumentNullException">Thrown when <paramref name="services"/> is null.</exception>
-        public static IServiceCollection AddAsyncSession<TAbstraction, TImplementation, TDataConnection>(this IServiceCollection services, bool registerFactoryDelegate = true)
+        /// <param name="factoryLifetime">The lifetime for the session factory. It's usually ok for them to be a singleton.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> is null.</exception>
+        public static IServiceCollection AddSessionFactoryFor<TAbstraction, TImplementation, TDataConnection>(this IServiceCollection services, ServiceLifetime factoryLifetime = ServiceLifetime.Singleton)
+            where TAbstraction : IAsyncSession
             where TImplementation : AsyncSession<TDataConnection>, TAbstraction, new()
             where TDataConnection : DataConnection
         {
-            services.MustNotBeNull(nameof(services));
-            services.AddTransient(ResolveAsyncSession<TAbstraction, TImplementation, TDataConnection>);
-            if (registerFactoryDelegate)
-                services.AddSingleton<Func<Task<TAbstraction>>>(container => container.GetRequiredService<Task<TAbstraction>>);
-
+            services.MustNotBeNull(nameof(services))
+                    .Add(new ServiceDescriptor(typeof(ISessionFactory<TAbstraction>), typeof(SessionFactory<TAbstraction, TImplementation, TDataConnection>), factoryLifetime));
             return services;
         }
 
         /// <summary>
-        /// Registers the specified session as a <see cref="Task{TAbstraction}" /> with a transient lifetime. When this dependency is resolved,
-        /// the session and a data connection will be instantiated, a transaction will be started asynchronously, and finally the data connection
-        /// is injected into the session. In your client code, you should request a Func&lt;Task&lt;TAbstraction>> so that you can instantiate, use, and
-        /// afterwards dispose a session:
+        /// Registers an <see cref="ISessionFactory{TAbstraction}" /> for the specified session. You can inject this session factory
+        /// into client code to resolve your session asynchronously. When resolved, a new data connection is created, a connection to
+        /// the target database is opened asynchronously, and a transaction is started. The data connection is then passed to your
+        /// custom session type. See <see cref="SessionFactory{TAbstraction,TImplementation,TDataConnection}" /> for details.
         /// <code>
         /// public class MySessionClient
         /// {
-        ///     public MySessionClient(Func&lt;Task&lt;IMySession>> createSessionAsync) =>
-        ///         CreateSessionAsync = createSessionAsync;
-        ///
-        ///     private Func&lt;Task&lt;IMySession>> CreateSessionAsync { get; }
-        ///
+        ///     public MySessionClient(ISessionFactory&lt;IMySession> sessionFactory) =>
+        ///         SessionFactory = sessionFactory;
+        /// 
+        ///     // IMySession must derive from IAsyncSession
+        ///     private ISessionFactory&lt;IMySession> SessionFactory { get; }
+        /// 
         ///     public async Task SomeMethod()
         ///     {
-        ///         await using var session = await CreateSessionAsync();
+        ///         await using var session = await SessionFactory.OpenSessionAsync();
         ///         // do something useful with your session
         ///     }
         /// }
         /// </code>
         /// </summary>
-        /// <typeparam name="TAbstraction">The interface that your session implements.</typeparam>
-        /// <typeparam name="TImplementation">The Linq2Db session implementation that performs the actual database I/O.</typeparam>
+        /// <typeparam name="TAbstraction">The interface that your session implements. It must implement <see cref="IAsyncSession" />.</typeparam>
+        /// <typeparam name="TImplementation">The Linq2Db session implementation that performs the actual database I/O. It must derive from <see cref="AsyncSession{TDataConnection}" />.</typeparam>
         /// <param name="services">The collection that holds all registrations for the DI container.</param>
-        /// <param name="registerFactoryDelegate">
-        /// The value indicating whether a factory delegate should be registered as a singleton. The default value is true. You should
-        /// set this to false if your DI container can support function factories out of the box, like e.g. LightInject (https://www.lightinject.net/#function-factories).
-        /// </param>
-        /// <exception cref="ArgumentNullException">Thrown when <paramref name="services"/> is null.</exception>
-        public static IServiceCollection AddAsyncSession<TAbstraction, TImplementation>(this IServiceCollection services, bool registerFactoryDelegate = true)
+        /// <param name="factoryLifetime">The lifetime for the session factory. It's usually ok for them to be a singleton.</param>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> is null.</exception>
+        public static IServiceCollection AddSessionFactoryFor<TAbstraction, TImplementation>(this IServiceCollection services, ServiceLifetime factoryLifetime = ServiceLifetime.Singleton)
+            where TAbstraction : IAsyncSession
             where TImplementation : AsyncSession, TAbstraction, new() =>
-            services.AddAsyncSession<TAbstraction, TImplementation, DataConnection>(registerFactoryDelegate);
-
-        /// <summary>
-        /// Uses the DI container to resolve the specified session. The underlying Linq2Db data connection will be
-        /// opened asynchronously, a transaction is started, and afterwards, data connection is injected into the session.
-        /// </summary>
-        /// <typeparam name="TAbstraction">The interface that your session implements.</typeparam>
-        /// <typeparam name="TImplementation">The Linq2Db session implementation that performs the actual database I/O.</typeparam>
-        /// <typeparam name="TDataConnection">Your custom data connection subtype that you use in your solution.</typeparam>
-        /// <param name="container">The DI container that resolves the corresponding types.</param>
-        /// <exception cref="ArgumentNullException">Thrown when <paramref name="container"/> is null.</exception>
-        /// <exception cref="InvalidOperationException">Thrown when <typeparamref name="TDataConnection"/> cannot be resolved via the container.</exception>
-        /// <exception cref="SqlException">Thrown when the underlying SQL connection cannot be opened or a transaction cannot be created.</exception>
-        public static async Task<TAbstraction> ResolveAsyncSession<TAbstraction, TImplementation, TDataConnection>(this IServiceProvider container)
-            where TImplementation : AsyncSession<TDataConnection>, TAbstraction, new()
-            where TDataConnection : DataConnection
-        {
-            container.MustNotBeNull(nameof(container));
-
-            var dataConnection = container.GetRequiredService<TDataConnection>();
-            var session = new TImplementation();
-            await dataConnection.BeginTransactionAsync(session.TransactionLevel);
-            session.SetDataConnection(dataConnection);
-            return session;
-        }
-
-        /// <summary>
-        /// Uses the DI container to resolve the specified session. The underlying Linq2Db data connection will be
-        /// opened asynchronously, a transaction is started, and afterwards, data connection is injected into the session.
-        /// </summary>
-        /// <typeparam name="TAbstraction">The interface that your session implements.</typeparam>
-        /// <typeparam name="TImplementation">The Linq2Db session implementation that performs the actual database I/O.</typeparam>
-        /// <param name="container">The DI container that resolves the corresponding types.</param>
-        /// <exception cref="ArgumentNullException">Thrown when <paramref name="container"/> is null.</exception>
-        /// <exception cref="InvalidOperationException">Thrown when the underlying data connection cannot be resolved via the container.</exception>
-        /// <exception cref="SqlException">Thrown when the underlying SQL connection cannot be opened or a transaction cannot be created.</exception>
-        public static Task<TAbstraction> ResolveAsyncSession<TAbstraction, TImplementation>(this IServiceProvider container)
-            where TImplementation : AsyncSession, TAbstraction, new() =>
-            ResolveAsyncSession<TAbstraction, TImplementation, DataConnection>(container);
+            services.AddSessionFactoryFor<TAbstraction, TImplementation, DataConnection>(factoryLifetime);
     }
 }

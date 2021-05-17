@@ -18,11 +18,12 @@ namespace Synnotech.Linq2Db.MsSqlServer.Tests
         {
             SkipTestIfNecessary();
 
-            var container = PrepareContainer().AddAsyncSession<IEmployeeSession, EmployeeSession>()
+            var container = PrepareContainer().AddSessionFactoryFor<IEmployeeSession, EmployeeSession>()
                                               .BuildServiceProvider();
+            var sessionFactory = container.GetRequiredService<ISessionFactory<IEmployeeSession>>();
 
             const string newName = "Margaret Doe";
-            await using (var session = await container.GetRequiredService<Task<IEmployeeSession>>())
+            await using (var session = await sessionFactory.OpenSessionAsync())
             {
                 var noLongerJohn = await session.GetEmployeeAsync(1);
                 noLongerJohn.Name = newName;
@@ -30,7 +31,7 @@ namespace Synnotech.Linq2Db.MsSqlServer.Tests
                 await session.SaveChangesAsync();
             }
 
-            await using (var session = await container.GetRequiredService<Task<IEmployeeSession>>())
+            await using (var session = await sessionFactory.OpenSessionAsync())
             {
                 var margaret = await session.GetEmployeeAsync(1);
                 margaret.Name.Should().Be(newName);
