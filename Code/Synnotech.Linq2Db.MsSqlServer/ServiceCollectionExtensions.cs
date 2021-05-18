@@ -30,6 +30,7 @@ namespace Synnotech.Linq2Db.MsSqlServer
         /// The delegate that manipulates the mapping schema of the data provider (optional). Alternatively, you could use the Linq2Db attributes to configure
         /// your model classes, but we strongly recommend that you use the Linq2Db <see cref="FluentMappingBuilder" /> to specify how model classes are mapped.
         /// </param>
+        /// <param name="configurationSectionName">The name of the configuration section that is used to retrieve the <see cref="Linq2DbSettings"/>.</param>
         /// <param name="dataConnectionLifetime">
         /// The lifetime that is used for the data connection (optional). The default value is <see cref="ServiceLifetime.Transient" />. If you want to, you
         /// can exchange it with <see cref="ServiceLifetime.Scoped" />.
@@ -41,12 +42,13 @@ namespace Synnotech.Linq2Db.MsSqlServer
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> is null.</exception>
         public static IServiceCollection AddLinq2DbForSqlServer(this IServiceCollection services,
                                                                 Action<MappingSchema>? createMappings = null,
+                                                                string configurationSectionName = Linq2DbSettings.DefaultSectionName,
                                                                 ServiceLifetime dataConnectionLifetime = ServiceLifetime.Transient,
                                                                 bool registerFactoryDelegateForDataConnection = true)
         {
             services.MustNotBeNull(nameof(services));
 
-            services.AddSingleton(container => Linq2DbSettings.FromConfiguration(container.GetRequiredService<IConfiguration>()))
+            services.AddSingleton(container => Linq2DbSettings.FromConfiguration(container.GetRequiredService<IConfiguration>(), configurationSectionName))
                     .AddSingleton(container => CreateSqlServerDataProvider(container.GetRequiredService<Linq2DbSettings>().SqlServerVersion, createMappings))
                     .AddSingleton(container =>
                      {
