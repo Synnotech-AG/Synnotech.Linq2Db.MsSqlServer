@@ -35,7 +35,6 @@ namespace Synnotech.Linq2Db.MsSqlServer
         /// <summary>
         /// Loads the <see cref="Linq2DbSettings"/> settings from configuration.
         /// </summary>
-        /// <typeparam name="T">The type of Linq2Db settings that will be used to load the settings.</typeparam>
         /// <param name="configuration">The configuration instance where the settings are loaded from.</param>
         /// <param name="sectionName">The name of the section that represents the Linq2Db settings.</param>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuration"/> or <paramref name="sectionName"/> is null.</exception>
