@@ -1,0 +1,1 @@
+dotnet pack ./Synnotech.Linq2Db.MsSqlServer.csproj --configuration Release /p:SignAssembly=true /p:AssemblyOriginatorKeyFile=./bin/Synnotech.Linq2Db.MsSqlServer.snk /p:ContinuousIntegrationBuild=true
