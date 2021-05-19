@@ -54,9 +54,9 @@ You can configure LinqToDb via your appsettings.json file
 }
 ```
 
-When you set `traceLevel` to a value other than `TraceLevel.Off`, your services also need to have an `ILoggerFactory` registered. It will be used to create a logger for data connection tracing. We recommend `TraceLevel.Info` to log all SQL statements in situations where you need to inspect the generated SQL statements, otherwise leave it off because it has a severe impact on performance and log file size.
+When you set `traceLevel` to a value other than `TraceLevel.Off`, your services also need to have an `ILogger<T>` (from Microsoft.Extensions.Logging) registered. It will be used for data connection tracing. We recommend `TraceLevel.Info` to log all SQL statements in situations where you need to inspect the generated SQL statements, otherwise leave it off because it has a severe impact on performance and log file size.
 
-Please note: the configuration is only loaded once at startup. If you change the database settings, you need to restart your web app.
+Please note: the configuration is only loaded once during startup. If you change the database settings, you need to restart your web app.
 
 `AddLinq2DbForSqlServer` has several optional parameters that you can supply:
 
