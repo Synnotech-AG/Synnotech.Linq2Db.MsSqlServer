@@ -56,7 +56,7 @@ namespace Synnotech.Linq2Db.MsSqlServer
                          return CreateLinq2DbConnectionOptions(container.GetRequiredService<IDataProvider>(),
                                                                settings.ConnectionString,
                                                                settings.TraceLevel,
-                                                               container.GetService<ILoggerFactory>());
+                                                               container.GetService<ILogger<DataConnection>>());
                      })
                     .Add(new ServiceDescriptor(typeof(DataConnection), container => new DataConnection(container.GetRequiredService<LinqToDbConnectionOptions>()), dataConnectionLifetime));
             if (registerFactoryDelegateForDataConnection)
@@ -80,22 +80,22 @@ namespace Synnotech.Linq2Db.MsSqlServer
         }
 
         /// <summary>
-        /// Creates the default <see cref="LinqToDbConnectionOptions" />. <paramref name="traceLevel" /> and <paramref name="loggerFactory" />
+        /// Creates the default <see cref="LinqToDbConnectionOptions" />. <paramref name="traceLevel" /> and <paramref name="logger" />
         /// are optional but need to be set together if a level other than <see cref="TraceLevel.Off" /> is used.
         /// </summary>
         /// <param name="dataProvider">The Linq2Db data provider used to create database-specific queries.</param>
         /// <param name="connectionString">The connection string for the target database.</param>
         /// <param name="traceLevel">The level that is used to log data connection messages (optional). Defaults to <see cref="TraceLevel.Off" />.</param>
-        /// <param name="loggerFactory">The logger factory that creates a logger for <see cref="DataConnection" /> when <paramref name="traceLevel" /> is set to a value other than <see cref="TraceLevel.Off" />.</param>
+        /// <param name="logger">The logger for <see cref="DataConnection" /> when <paramref name="traceLevel" /> is set to a value other than <see cref="TraceLevel.Off" />.</param>
         /// <exception cref="NullReferenceException">Thrown when <paramref name="dataProvider" /> or <paramref name="connectionString" /> are null.</exception>
         /// <exception cref="ArgumentException">
-        /// Thrown when <paramref name="traceLevel" /> is set to a value other than <see cref="TraceLevel.Off" /> and <paramref name="loggerFactory" /> is null -
+        /// Thrown when <paramref name="traceLevel" /> is set to a value other than <see cref="TraceLevel.Off" /> and <paramref name="logger" /> is null -
         /// or when <paramref name="connectionString" /> is an empty string or contains only white space.
         /// </exception>
         public static LinqToDbConnectionOptions CreateLinq2DbConnectionOptions(IDataProvider dataProvider,
                                                                                string connectionString,
                                                                                TraceLevel traceLevel = TraceLevel.Off,
-                                                                               ILoggerFactory? loggerFactory = null)
+                                                                               ILogger<DataConnection>? logger = null)
         {
             dataProvider.MustNotBeNull(nameof(dataProvider));
             connectionString.MustNotBeNullOrWhiteSpace(nameof(connectionString));
@@ -106,10 +106,9 @@ namespace Synnotech.Linq2Db.MsSqlServer
             if (traceLevel == TraceLevel.Off)
                 return optionsBuilder.Build();
 
-            if (loggerFactory == null)
-                throw new ArgumentException($"You must provide a loggerFactory when traceLevel is set to \"{traceLevel}\".", nameof(loggerFactory));
+            if (logger == null)
+                throw new ArgumentException($"You must provide a logger when traceLevel is set to \"{traceLevel}\".", nameof(logger));
 
-            var logger = loggerFactory.CreateLogger<DataConnection>();
             return optionsBuilder.WithTraceLevel(traceLevel)
                                  .WriteTraceWith(logger.LogLinq2DbMessage)
                                  .Build();

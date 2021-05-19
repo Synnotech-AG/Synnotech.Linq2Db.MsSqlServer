@@ -5,11 +5,14 @@ using LinqToDB.Data;
 using Microsoft.Extensions.DependencyInjection;
 using Synnotech.DatabaseAbstractions;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace Synnotech.Linq2Db.MsSqlServer.Tests
 {
     public sealed class AsyncTransactionalSessionTests : BaseMsSqlIntegrationTest
     {
+        public AsyncTransactionalSessionTests(ITestOutputHelper output) : base(output) { }
+
         [Fact]
         public static void MustImplementITransactionalSession() =>
             typeof(AsyncTransactionalSession<>).Should().Implement<IAsyncTransactionalSession>();
@@ -23,8 +26,8 @@ namespace Synnotech.Linq2Db.MsSqlServer.Tests
                                               .BuildServiceProvider();
 
             int newEmployeeId;
-            await using(var session = container.GetRequiredService<Session>())
-            await using(var transaction = await session.BeginTransactionAsync())
+            await using (var session = container.GetRequiredService<Session>())
+            await using (var transaction = await session.BeginTransactionAsync())
             {
                 var newEmployee = new Employee { Name = "Mr. X", Age = 142 };
                 newEmployeeId = await session.InsertEmployeeAsync(newEmployee);

@@ -4,11 +4,14 @@ using LinqToDB;
 using Microsoft.Extensions.DependencyInjection;
 using Synnotech.DatabaseAbstractions;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace Synnotech.Linq2Db.MsSqlServer.Tests
 {
     public sealed class AsyncSessionTests : BaseMsSqlIntegrationTest
     {
+        public AsyncSessionTests(ITestOutputHelper output) : base(output) { }
+
         [Fact]
         public static void MustImplementIAsyncSession() =>
             typeof(AsyncSession<>).Should().Implement<IAsyncSession>();

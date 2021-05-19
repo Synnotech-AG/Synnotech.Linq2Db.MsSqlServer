@@ -4,15 +4,21 @@ using Light.GuardClauses;
 using Light.GuardClauses.Exceptions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Serilog;
 using Synnotech.MsSqlServer;
 using Synnotech.Xunit;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace Synnotech.Linq2Db.MsSqlServer.Tests
 {
     public abstract class BaseMsSqlIntegrationTest : IAsyncLifetime
     {
+        protected BaseMsSqlIntegrationTest(ITestOutputHelper output) => Logger = output.CreateTestLogger();
+
         private bool AreDatabaseTestsEnabled => TestSettings.Configuration.GetValue<bool>("database:areTestsEnabled");
+
+        private ILogger? Logger { get; }
 
         protected string ConnectionString
         {
@@ -38,8 +44,13 @@ namespace Synnotech.Linq2Db.MsSqlServer.Tests
 
         protected void SkipTestIfNecessary() => Skip.IfNot(AreDatabaseTestsEnabled);
 
-        protected IServiceCollection PrepareContainer() =>
-            new ServiceCollection().AddLinq2DbForSqlServer(DatabaseMappings.CreateMappings)
-                                   .AddSingleton(TestSettings.Configuration);
+        protected IServiceCollection PrepareContainer()
+        {
+            var services = new ServiceCollection().AddLinq2DbForSqlServer(DatabaseMappings.CreateMappings)
+                                                  .AddSingleton(TestSettings.Configuration);
+            if (Logger != null)
+                services.AddLogging(builder => builder.AddSerilog(Logger));
+            return services;
+        }
     }
 }

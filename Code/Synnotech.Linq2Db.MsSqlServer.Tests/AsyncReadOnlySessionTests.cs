@@ -5,13 +5,15 @@ using FluentAssertions;
 using LinqToDB;
 using LinqToDB.Data;
 using Microsoft.Extensions.DependencyInjection;
-using Synnotech.Xunit;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace Synnotech.Linq2Db.MsSqlServer.Tests
 {
     public sealed class AsyncReadOnlySessionTests : BaseMsSqlIntegrationTest
     {
+        public AsyncReadOnlySessionTests(ITestOutputHelper output) : base(output) { }
+
         [Fact]
         public static void MustImplementIDisposable() =>
             typeof(AsyncReadOnlySession<>).Should().Implement<IDisposable>();
