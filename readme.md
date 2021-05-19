@@ -21,9 +21,9 @@ Synnotech.Linq2Db.MsSqlServer is available as a [NuGet package](https://www.nuge
 
 Synnotech.Linq2Db.MsSqlServer implements the session abstractions of [Synnotech.DatabaseAbstractions](https://github.com/Synnotech-AG/Synnotech.DatabaseAbstractions) for Linq2Db 3.3.0 or newer, targeting Microsoft.Data.SqlClient. This allows you to simplify the code in your data access layer. Furthermore, Synnotech.Linq2Db.MsSqlServer allows you to configure your DI container with one call when you want to use the Synnotech default settings.
 
-# Default Configuration
+# Default configuration
 
-Synnotech.Linq2Db.MsSqlServer provides extension method for `IServiceCollection` to easily get started in e.g. ASP.NET Core Apps. Simply call `AddLinq2DbForSqlServer`:
+Synnotech.Linq2Db.MsSqlServer provides an extension method for `IServiceCollection` to easily get started in e.g. ASP.NET Core Apps. Simply call `AddLinq2DbForSqlServer`:
 
 ```csharp
 public void ConfigureService(IServiceCollection services)
@@ -36,12 +36,12 @@ public void ConfigureService(IServiceCollection services)
 The method will do the following:
 
 1. Load the `Linq2DbSettings` from the `IConfiguration` instance that is already present in the DI container and register it as a singleton.
-1. Create a Linq2Db `IDataProvider` for MS SQL Server and register it as a singleton
+1. Create a Linq2Db `IDataProvider` for MS SQL Server and register it as a singleton.
 1. Create an instance of `LinqToDbConnectionOptions` which configures the data provider, connection string, and trace level, and register it as a singleton.
 1. Register the `DataConnection` with a transient lifetime (by default). The `LinqToDbConnectionOptions` singleton will be passed into the data connection.
-1. Register a `Func<DataConnection>` as a singleton, which allows to resolve a data connection dynamically in code.
+1. Register a `Func<DataConnection>` as a singleton, which allows to resolve a data connection dynamically in code (this is also a required dependency for the `ISessionFactory<T>` implementation).
 
-You can configure LinqToDb via the your appsettings.json file
+You can configure LinqToDb via your appsettings.json file
 
 ```jsonc
 {
@@ -54,7 +54,9 @@ You can configure LinqToDb via the your appsettings.json file
 }
 ```
 
-When you set `traceLevel` to a value other than `TraceLevel.Off`, your services also need to have an `ILoggerFactory` registered. It will be used to create a logger for data connection tracing. We recommend `TraceLevel.Info` to log all SQL statements.
+When you set `traceLevel` to a value other than `TraceLevel.Off`, your services also need to have an `ILoggerFactory` registered. It will be used to create a logger for data connection tracing. We recommend `TraceLevel.Info` to log all SQL statements in situations where you need to inspect the generated SQL statements, otherwise leave it off because it has a severe impact on performance and log file size.
+
+Please note: the configuration is only loaded once at startup. If you change the database settings, you need to restart your web app.
 
 `AddLinq2DbForSqlServer` has several optional parameters that you can supply:
 
@@ -64,3 +66,254 @@ When you set `traceLevel` to a value other than `TraceLevel.Off`, your services 
 - `registerFactoryDelegateForDataConnection`: the value indicating whether a `Func<DataConnection>` should be registered with the DI Container. The default value is `true`. You can set this value to false if you use a proper DI container like [LigthInject](https://github.com/seesharper/LightInject) that supports [Function Factories](https://www.lightinject.net/#function-factories).
 
 If you don't want to use `AddLinq2DbForSqlServer`, you might still want to reuse its internal functionality. Just take a look at the source code of `Linq2DbSettings`, `CreateSqlServerDataProvider`, `CreateLinq2DbConnectionOptions`, and `LogLinq2DbMessage`.
+
+# Writing custom sessions
+
+When writing code that performs I/O with MS SQL Server, we usually write custom abstractions, containing a single method for each I/O request. The following sections show you how to design abstractions, implement them, and call them in client code.
+
+## Session that only read data
+
+The following code snippets show the example for an ASP.NET Core controller that represents an HTTP GET operation for contacts.
+
+Your I/O abstraction should simply derive from `IAsyncDisposable` and offer the corresponding I/O call to load contacts:
+
+```csharp
+public interface IGetContactsSession : IAsyncDisposable
+{
+    Task<List<Contact>> GetContactsAsync(int skip, int take);
+}
+```
+
+To implement this interface, you should derive from the AsyncReadOnlySession class of Synnotech.Linq2Db.MsSqlServer:
+
+```csharp
+public sealed class LinqToDbGetContactsSession : AsyncReadOnlySession, IGetContactsSession
+{
+    public LinqToDbGetContactsSession(DataConnection dataConnection) : base(dataConnection) { }
+
+    public Task<List<Contact>> GetContactsAsync(int skip, int take) =>
+        DataConnection.GetTable<Contacts>()
+                      .OrderBy(contact => contact.LastName)
+                      .Skip(skip)
+                      .Take(take)
+                      .ToListAsync();
+}
+```
+
+`AsyncReadOnlySession` implements `IAsyncDisposable` (and  `IDisposable`) for you and provides LinqToDb's `DataConnection` via a protected property. This reduces the code you need to write in your session for your specific use case.
+
+You can then consume your session via the abstraction in client code. Check out the following ASP.NET Core controller for example:
+
+```csharp
+[ApiController]
+[Route("api/contacts")]
+public sealed class GetContactsController : ControllerBase
+{
+    public GetContactsController(Func<IGetContactsSession> createSession) =>
+        CreateSession = createSession;
+        
+    private Func<IGetContractsSession> CreateSession { get; }
+    
+    [HttpGet]
+    public async Task<ActionResult<List<ContactDto>>> GetContacts(int skip, int take)
+    {
+        if (this.CheckPagingParametersForErrors(skip, take, out var badResult))
+            return badResult;
+        
+        await using var session = CreateSession();
+        var contacts = await session.GetContactsAsync(skip, take);
+        return ContactDto.FromContacts(contacts);
+    }
+}
+```
+
+In this example, a `Func<IGetContactsSession>` is injected into the controller. This factory delegate is used to instantiate the session once the parameters are validated. We recommend that you do not register your session as "scoped", but rather as transient with your DI container (because it's the controllers responsibility to properly open and close the session). This allows you to test if the session is disposed correctly without setting up the whole ASP.NET Core ecosystem to instantiate the controller.
+
+For this to work, we suggest that you use a DI container like [LightInject](https://github.com/seesharper/LightInject) that automatically provides you with [function factories](https://www.lightinject.net/#function-factories) once you have registered a type. If you use a DI container that does not support this feature, you can simply register the function factory yourself (typically as a singleton).
+
+## Sessions that manipulate data
+
+If your session requires the `SaveChangesAsync` method, or you want to handle individual transactions, you can derive from the `IAsyncSession` or `IAsyncTransactionalSession`, respectively. We recommend that you open sessions that derive from `IAsyncSession` via an `ISessionFactory<T>`.
+
+### Example for updating an existing record with IAsyncSession
+
+The abstraction might look like this:
+
+```csharp
+public interface IUpdateContactSession : IAsyncSession
+{
+    Task<Contact?> GetContactAsync(int id);
+
+    Task UpdateContactAsync(Contact contact);
+}
+```
+
+The class that implements this interface should derive from `AsyncSession`, which provides the same members as `AsyncReadOnlySession` plus a `SaveChangesAsync` method that commits the internal transaction:
+
+```csharp
+public sealed class LinqToDbUpdateContactSession : AsyncSession, IUpdateContactSession
+{
+    public Task<Contact?> GetContactAsync(int id) =>
+#nullable disable
+        DataConnection.GetTable<Contact>()
+                      .FirstOrDefaultAsync(contact => contact.Id == id);
+#nullable restore
+
+    public Task UpdateContactAsync(Contact contact) => DataConnection.UpdateAsync(contact);
+}
+```
+
+You should register a factory for your session with your DI container:
+
+```csharp
+services.AddSessionFactoryFor<IUpdateContactSession, LinqToDbUpdateContactSession>();
+```
+
+Your controller could then use the factory to open the session asynchronously:
+
+```csharp
+[ApiController]
+[Route("api/contacts/update")]
+public sealed class UpdateContactController : ControllerBase
+{
+    public UpdateContactController(ISessionFactory<IUpdateContactSession> sessionFactory,
+                                   ContactValidator validator)
+    {
+        SessionFactory = sessionFactory;
+        Validator = validator;
+    }
+    
+    private ISessionFactory<IUpdateContactSession> SessionFactory { get; }
+    private ContactValidator Validator { get; }
+    
+    [HttpPut]
+    public async Task<IActionResult> UpdateContact(ContactDto contactDto)
+    {
+        if (this.CheckForErrors(contactDto, Validator, out var badResult))
+            return badResult;
+            
+        // The session factory opens the connection asynchronously and starts a transaction.
+        // Disposing the session will automatically rollback the transaction if SaveChangesAsync
+        // is not called.
+        await using var session = await SessionFactory.OpenSessionAsync();
+        var contact = await session.GetContactAsync(contactDto.Id);
+        if (contact == null)
+            return NotFound();
+        contactDto.UpdateContact(contact); // Or use an object-to-object mapper
+        await session.UpdateContactAsync(contact);
+        await session.SaveChangesAsync(); // This commits the underlying transaction
+        return NoContent();
+    }
+}
+```
+
+Please note the following things about the session factory:
+
+- `LinqToDbUpdateContactSession` does not have a constructor that takes a `DataConnection`. This is done because the data connection needs to be initialized asynchronously (open the connection asynchronously, start the transaction asynchronously) before being passed
+to the `AsyncSession`. However, constructors in C# / .NET cannot run asynchronously. This job is performed by the implementation of `ISessionFactory<T>`. You can opt out of this feature by using the constructor of `AsyncSession` that actually takes a data connection. This data connection must be open and reference a transaction before being passed.
+- The implementation for `ISessionFactory<T>` will always create a transient instance of the target session (i.e. your session must have a default constructor). If you don't want transient instances, you need to opt out of `ISessionFactory` (although we do not recommend this - we think it is the controller's responsibility to handle the session during an HTTP request).
+- You should only use `ISessionFactory<T>` in scenarios where you use `IAsyncSession`. If your session is read-only (i.e. no transaction required) or when you handle transactions yourself via `IAsyncTransactionalSession`, you will not be able to use the session factory (as asynchronous opening is not required).
+
+### Handling Transactions Individually
+
+If you need to handle transactions individually, (e.g. because you want to handle a large amount of data in batches and have a transaction per batch), you can derive from the `IAsyncTransactionalSession` interface:
+
+```csharp
+public interface IUpdateProductsSession : IAsyncTransactionalSession
+{
+    Task<int> GetProductCountAsync();
+
+    Task<List<Product>> GetProductBatchAsync(int skip, int take);
+
+    Task UpdateProductAsync(Product product);
+}
+```
+
+`IAsyncTransactionalSession` has no `SaveChangesAsync` method, but a `BeginTransactionAsync` method that you can use to start individual transactions.
+
+The implementation of this session could look like this:
+
+```csharp
+public sealed class LinqToDbUpdateProductsSession : AsyncTransactionalSession, IUpdateProductsSession
+{
+    public LinqToDbUpdateProductsSession(DataConnection dataConnection) : base(dataConnection) { }
+
+    public Task<int> GetProductsCountAsync() => DataConnection.GetTable<Product>().CountAsync();
+
+    public Task<List<Product>> GetProductBatchAsync(int skip, int take) =>
+        DataConnection.GetTable<Product>()
+                      .OrderBy(product => product.Id)
+                      .Skip(skip)
+                      .Take(take)
+                      .ToListAsync();
+    
+    public Task UpdateProductAsync(Product product) => DataConnection.UpdateAsync(product);
+}
+```
+
+Your job that then updates all products might look like this:
+
+```csharp
+public sealed class UpdateAllProductsJob
+{
+    public UpdateAllProductsJob(Func<IUpdateProductsSession> createSession, ILogger logger)
+    {
+        CreateSession = createSession;
+        Logger = logger;
+    }
+    
+    private Func<IUpdateProductsSession> CreateSession { get; }
+    private ILogger Logger { get; }
+
+    public async Task UpdateProductsAsync()
+    {
+        await using var session = CreateSession();
+        var numberOfProducts = await session.GetProductsCountAsync();
+        const int batchSize = 100;
+        var skip = 0;
+        while (skip < numberOfProducts)
+        {
+            IAsyncTransaction? transaction = null;
+            try
+            {
+                transaction = session.BeginTransactionAsync();
+                var products = session.GetProductBatchAsync(skip, batchSize);
+                foreach (var product in products)
+                {
+                    if (product.TryPerformDailyUpdate(Logger))
+                        await session.UpdateProductAsync(product);
+                }
+
+                await transaction.CommitAsync();
+            }
+            catch (Exception exception)
+            {
+                Logger.Error(exception, "Batch {From} to {To} could not be updated properly", skip + 1, batchSize + skip);
+            }
+            finally
+            {
+                if (transaction != null)
+                    await transaction.DisposeAsync();
+            }
+
+            skip += batchSize;
+        }
+    }
+}
+```
+
+In the example above, the job gets a delegate `Func<IUpdateProductsSession>` injected that can be used to create a session. In `UpdateProductsAsync`, the session is created and the number of products is determined. The products are then updated in batches with size 100. In each batch, a new transaction is started and committed at the end. The transaction is disposed in the finally block before a new batch begins.
+
+*Please keep in mind*: neither LinqToDB nor Synnotech.DatabaseAbstractions support nested transactions. You should always start a single transaction, commit and dispose it, and only afterwards create a new transaction. If you create a new transaction before committing it, your current transaction will be disposed (and implicitly rolled back).
+
+# General recommendations
+
+1. All I/O should be abstracted. You should create abstractions that are specific for your use cases.
+2. Your custom abstractions should derive from `IAsyncDisposable` (when they only read data from SQL Server) or from `IAsyncSession` (when they also manipulate data and therefore need a transaction). Only if you need to handle several transactions with a single session should you use `IAsyncTransactionalSession`.
+3. Prefer async I/O over sync I/O. Threads that wait for a database query to complete can handle other requests in the meantime when the query is performed asynchronously. This prevents thread starvation under high load and allows your web service to scale better. Synnotech.Linq2Db.MsSqlServer currently does not support synchronous sessions for this reason.
+4. In case of web apps, we do not recommend using the DI container to dispose of the session. Instead, it is the controller's responsibility to do that. This way you can easily test the controller without running the whole ASP.NET Core infrastructure in your tests. To make your life easier, use an appropriate DI container like [LightInject](https://github.com/seesharper/LightInject) that provides more functionality like [Function Factories](https://www.lightinject.net/#function-factories) instead of Microsoft.Extensions.DependencyInjection.
+
+# Trivia
+
+- The SQL Client, originally available in the System.Data.SqlClient namespace, is now actually developed in a new project called [Microsoft.Data.SqlClient](https://github.com/dotnet/sqlclient). Both exist next to each other, but only Microsoft.Data.SqlClient will receive new features.
+- As of May 2021, almost all calls to SQL Server are implemented in an async fashion. For transactions, this is not the case. The corresponding classes (in Microsoft.Data.SqlClient as well as in System.Data.SqlClient) do not support operations to begin, commit, rollback, and dispose transactions asynchronously. There are members for that on `DbTransaction`, but these simply call the synchronous methods. It remains to be seen when transactions will support asynchronous I/O. Synnotech.Linq2Db.MsSqlServer still calls transactions asynchronously because the overhead in a method that needs to be async anyway (for opening the session, loading, inserting, and updating) is negligible.
