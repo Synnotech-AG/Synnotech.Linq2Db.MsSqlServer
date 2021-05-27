@@ -25,39 +25,20 @@ namespace Synnotech.Linq2Db.MsSqlServer
         private DataConnectionTransaction DataConnectionTransaction { get; }
 
         /// <summary>
-        /// Gets the value indicating whether <see cref="CommitAsync"/> has already been called.
+        /// Disposes the underlying transaction. It will also be rolled back if
+        /// <see cref="CommitAsync"/> was not called up to this point.
         /// </summary>
-        public bool IsCommitted { get; private set; }
+        public ValueTask DisposeAsync() => DataConnectionTransaction.DisposeAsync();
 
         /// <summary>
         /// Disposes the underlying transaction. It will also be rolled back if
         /// <see cref="CommitAsync"/> was not called up to this point.
         /// </summary>
-        public async ValueTask DisposeAsync()
-        {
-            if (!IsCommitted)
-                await DataConnectionTransaction.RollbackAsync();
-            await DataConnectionTransaction.DisposeAsync();
-        }
-
-        /// <summary>
-        /// Disposes the underlying transaction. It will also be rolled back if
-        /// <see cref="CommitAsync"/> was not called up to this point.
-        /// </summary>
-        public void Dispose()
-        {
-            if (!IsCommitted)
-                DataConnectionTransaction.Rollback();
-            DataConnectionTransaction.Dispose();
-        }
+        public void Dispose() => DataConnectionTransaction.Dispose();
 
         /// <summary>
         /// Commits all changes to the database.
         /// </summary>
-        public async Task CommitAsync(CancellationToken cancellationToken = default)
-        {
-            await DataConnectionTransaction.CommitAsync(cancellationToken);
-            IsCommitted = true;
-        }
+        public Task CommitAsync(CancellationToken cancellationToken = default) => DataConnectionTransaction.CommitAsync(cancellationToken);
     }
 }
