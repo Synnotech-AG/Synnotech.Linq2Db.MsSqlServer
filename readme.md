@@ -5,7 +5,7 @@
 [![Synnotech Logo](synnotech-large-logo.png)](https://www.synnotech.de/)
 
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](https://github.com/Synnotech-AG/Synnotech.Linq2Db.MsSqlServer/blob/main/LICENSE)
-[![NuGet](https://img.shields.io/badge/NuGet-1.0.0-blue.svg?style=for-the-badge)](https://www.nuget.org/packages/Synnotech.Linq2Db.MsSqlServer/)
+[![NuGet](https://img.shields.io/badge/NuGet-2.0.0-blue.svg?style=for-the-badge)](https://www.nuget.org/packages/Synnotech.Linq2Db.MsSqlServer/)
 
 # How to install
 
@@ -13,7 +13,7 @@ Synnotech.Linq2Db.MsSqlServer is compiled against [.NET Standard 2.0 and 2.1](ht
 
 Synnotech.Linq2Db.MsSqlServer is available as a [NuGet package](https://www.nuget.org/packages/Synnotech.Linq2Db.MsSqlServer/) and can be installed via:
 
-- **Package Reference in csproj**: `<PackageReference Include="Synnotech.Linq2Db.MsSqlServer" Version="1.0.0" />`
+- **Package Reference in csproj**: `<PackageReference Include="Synnotech.Linq2Db.MsSqlServer" Version="2.0.0" />`
 - **dotnet CLI**: `dotnet add package Synnotech.Linq2Db.MsSqlServer`
 - **Visual Studio Package Manager Console**: `Install-Package Synnotech.Linq2Db.MsSqlServer`
 
@@ -23,7 +23,7 @@ Synnotech.Linq2Db.MsSqlServer implements the session abstractions of [Synnotech.
 
 # Default configuration
 
-Synnotech.Linq2Db.MsSqlServer provides an extension method for `IServiceCollection` to easily get started in e.g. ASP.NET Core Apps. Simply call `AddLinq2DbForSqlServer`:
+Synnotech.Linq2Db.MsSqlServer provides an extension method for `IServiceCollection` to easily get you started in e.g. ASP.NET Core Apps. Simply call `AddLinq2DbForSqlServer`:
 
 ```csharp
 public void ConfigureService(IServiceCollection services)
@@ -71,11 +71,11 @@ If you don't want to use `AddLinq2DbForSqlServer`, you might still want to reuse
 
 When writing code that performs I/O with MS SQL Server, we usually write custom abstractions, containing a single method for each I/O request. The following sections show you how to design abstractions, implement them, and call them in client code.
 
-## Session that only read data
+## Sessions that only read data
 
 The following code snippets show the example for an ASP.NET Core controller that represents an HTTP GET operation for contacts.
 
-Your I/O abstraction should simply derive from `IAsyncDisposable` and offer the corresponding I/O call to load contacts:
+Your I/O abstraction should simply derive from `IAsyncReadOnlySession` and offer the corresponding I/O call to load contacts:
 
 ```csharp
 public interface IGetContactsSession : IAsyncDisposable
@@ -84,7 +84,7 @@ public interface IGetContactsSession : IAsyncDisposable
 }
 ```
 
-To implement this interface, you should derive from the AsyncReadOnlySession class of Synnotech.Linq2Db.MsSqlServer:
+To implement this interface, you should derive from the `AsyncReadOnlySession` class of Synnotech.Linq2Db.MsSqlServer:
 
 ```csharp
 public sealed class LinqToDbGetContactsSession : AsyncReadOnlySession, IGetContactsSession
@@ -100,7 +100,7 @@ public sealed class LinqToDbGetContactsSession : AsyncReadOnlySession, IGetConta
 }
 ```
 
-`AsyncReadOnlySession` implements `IAsyncDisposable` (and  `IDisposable`) for you and provides LinqToDb's `DataConnection` via a protected property. This reduces the code you need to write in your session for your specific use case.
+`AsyncReadOnlySession` implements `IAsyncReadOnlySession`, `IDisposable` and `IAsyncDisposable` for you and provides LinqToDb's `DataConnection` via a protected property. This reduces the code you need to write in your session for your specific use case.
 
 You can then consume your session via the abstraction in client code. Check out the following ASP.NET Core controller for example:
 
@@ -131,9 +131,16 @@ In this example, a `Func<IGetContactsSession>` is injected into the controller. 
 
 For this to work, we suggest that you use a DI container like [LightInject](https://github.com/seesharper/LightInject) that automatically provides you with [function factories](https://www.lightinject.net/#function-factories) once you have registered a type. If you use a DI container that does not support this feature, you can simply register the function factory yourself (typically as a singleton).
 
+```csharp
+services.AddTransient<IGetContactsSession, LinqToDbGetContactsSession>();
+// The next call is not necessary if your DI container can automatically resolve
+// Func<T> when T is already registered. LightInject is able to do this.
+services.AddSingleton<Func<IGetContactsSession>>(container => container.GetRequiredService<IGetContactsSession>);
+```
+
 ## Sessions that manipulate data
 
-If your session requires the `SaveChangesAsync` method, or you want to handle individual transactions, you can derive from the `IAsyncSession` or `IAsyncTransactionalSession`, respectively. We recommend that you open sessions that derive from `IAsyncSession` via an `ISessionFactory<T>`.
+If your session requires the `SaveChangesAsync` method, or you want to handle individual transactions, you can derive from the `IAsyncSession` interface or `IAsyncTransactionalSession` interface, respectively. We recommend that you open sessions that derive from `IAsyncSession` via an `ISessionFactory<T>`. All of these APIs support aborting async operations via cancellation tokens.
 
 ### Example for updating an existing record with IAsyncSession
 
@@ -251,7 +258,7 @@ public sealed class LinqToDbUpdateProductsSession : AsyncTransactionalSession, I
 }
 ```
 
-Your job that then updates all products might look like this:
+Your job that updates all products might look like this:
 
 ```csharp
 public sealed class UpdateAllProductsJob
@@ -309,11 +316,20 @@ In the example above, the job gets a delegate `Func<IUpdateProductsSession>` inj
 # General recommendations
 
 1. All I/O should be abstracted. You should create abstractions that are specific for your use cases.
-2. Your custom abstractions should derive from `IAsyncDisposable` (when they only read data from SQL Server) or from `IAsyncSession` (when they also manipulate data and therefore need a transaction). Only if you need to handle several transactions with a single session should you use `IAsyncTransactionalSession`.
+2. Your custom abstractions should derive from `IAsyncReadOnlySession` (when they only read data from SQL Server) or from `IAsyncSession` (when they also manipulate data and therefore need a transaction). Only use `IAsyncTransactionalSession` when you need to handle several transactions within a single session.
 3. Prefer async I/O over sync I/O. Threads that wait for a database query to complete can handle other requests in the meantime when the query is performed asynchronously. This prevents thread starvation under high load and allows your web service to scale better. Synnotech.Linq2Db.MsSqlServer currently does not support synchronous sessions for this reason.
-4. In case of web apps, we do not recommend using the DI container to dispose of the session. Instead, it is the controller's responsibility to do that. This way you can easily test the controller without running the whole ASP.NET Core infrastructure in your tests. To make your life easier, use an appropriate DI container like [LightInject](https://github.com/seesharper/LightInject) that provides more functionality like [Function Factories](https://www.lightinject.net/#function-factories) instead of Microsoft.Extensions.DependencyInjection.
+4. In case of web apps, we do not recommend using the DI container to dispose of the session. Instead, it is the controller's responsibility to do that. This way you can easily test the controller without running the whole ASP.NET Core infrastructure in your tests. To make your life easier, use an appropriate DI container like [LightInject](https://github.com/seesharper/LightInject) instead of Microsoft.Extensions.DependencyInjection. These more sophisticated DI containers provide you with more features, e.g. [Function Factories](https://www.lightinject.net/#function-factories).
 
 # Trivia
 
 - The SQL Client, originally available in the System.Data.SqlClient namespace, is now actually developed in a new project called [Microsoft.Data.SqlClient](https://github.com/dotnet/sqlclient). Both exist next to each other, but only Microsoft.Data.SqlClient will receive new features.
 - As of May 2021, almost all calls to SQL Server are implemented in an async fashion. For transactions, this is not the case. The corresponding classes (in Microsoft.Data.SqlClient as well as in System.Data.SqlClient) do not support operations to begin, commit, rollback, and dispose transactions asynchronously. There are members for that on `DbTransaction`, but these simply call the synchronous methods. It remains to be seen when transactions will support asynchronous I/O. Synnotech.Linq2Db.MsSqlServer still calls transactions asynchronously because the overhead in a method that needs to be async anyway (for opening the session, loading, inserting, and updating) is negligible.
+
+# Migration Guides
+
+## From 1.0.0 to 2.0.0
+
+The following changes require recompilation. The surface areas of the APIs were either extended or stayed the same.
+
+- `AsyncReadOnlySession` now directly implements `IAsyncReadOnlySession` instead of `IAsyncDisposable` and `IDisposable`
+- `AsyncSession<T>`, `AsyncTransactionalSession<T>`, and `Linq2DbTransaction` now support an optional cancellation token on their async APIs.
