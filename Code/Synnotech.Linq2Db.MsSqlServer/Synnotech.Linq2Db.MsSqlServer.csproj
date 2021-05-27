@@ -25,6 +25,7 @@
 Synntech.Linq2Db.MsSqlServer 2.0.0
 --------------------------------
 
+- breaking change: added support for CancellationToken to async APIs
 - implements the abstractions of Synnotech.DatabaseAbstractions 2.0.0 for Linq2Db.
 - see all docs at https://github.com/Synnotech-AG/Synnotech.Linq2Db.MsSqlServer
         </PackageReleaseNotes>
