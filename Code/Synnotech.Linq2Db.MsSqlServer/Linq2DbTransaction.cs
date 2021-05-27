@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Threading;
 using System.Threading.Tasks;
 using Light.GuardClauses;
 using LinqToDB.Data;
@@ -53,9 +54,9 @@ namespace Synnotech.Linq2Db.MsSqlServer
         /// <summary>
         /// Commits all changes to the database.
         /// </summary>
-        public async Task CommitAsync()
+        public async Task CommitAsync(CancellationToken cancellationToken = default)
         {
-            await DataConnectionTransaction.CommitAsync();
+            await DataConnectionTransaction.CommitAsync(cancellationToken);
             IsCommitted = true;
         }
     }

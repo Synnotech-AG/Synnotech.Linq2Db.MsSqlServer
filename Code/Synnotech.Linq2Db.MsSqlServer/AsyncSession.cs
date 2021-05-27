@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Data;
+using System.Threading;
 using System.Threading.Tasks;
 using Light.GuardClauses;
 using LinqToDB.Data;
@@ -69,7 +70,7 @@ namespace Synnotech.Linq2Db.MsSqlServer
         /// <summary>
         /// Commits the internal transaction.
         /// </summary>
-        public Task SaveChangesAsync() => DataConnection.CommitTransactionAsync();
+        public Task SaveChangesAsync(CancellationToken cancellationToken = default) => DataConnection.CommitTransactionAsync(cancellationToken);
 
         internal void SetDataConnection(TDataConnection dataConnection)
         {

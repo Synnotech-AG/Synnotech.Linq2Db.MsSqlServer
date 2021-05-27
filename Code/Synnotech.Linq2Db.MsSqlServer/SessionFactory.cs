@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Threading;
 using System.Threading.Tasks;
 using Light.GuardClauses;
 using LinqToDB.Data;
@@ -34,11 +35,11 @@ namespace Synnotech.Linq2Db.MsSqlServer
         /// and starts a transaction. The data connection is then passed to a new session instance.
         /// </summary>
         /// <exception cref="SqlException">Thrown when an SQL error occurred when opening the session or starting the transaction.</exception>
-        public async Task<TAbstraction> OpenSessionAsync()
+        public async Task<TAbstraction> OpenSessionAsync(CancellationToken cancellationToken = default)
         {
             var dataConnection = CreateDataConnection();
             var session = new TImplementation();
-            await dataConnection.BeginTransactionAsync(session.TransactionLevel);
+            await dataConnection.BeginTransactionAsync(session.TransactionLevel, cancellationToken);
             session.SetDataConnection(dataConnection);
             return session;
         }

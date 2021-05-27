@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Threading;
 using System.Threading.Tasks;
 using LinqToDB.Data;
 using Synnotech.DatabaseAbstractions;
@@ -31,9 +32,9 @@ namespace Synnotech.Linq2Db.MsSqlServer
         /// calling this method again - Linq2Db will dispose the active transaction and create a
         /// new one internally.
         /// </summary>
-        public async Task<IAsyncTransaction> BeginTransactionAsync()
+        public async Task<IAsyncTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default)
         {
-            var dataConnectionTransaction = await DataConnection.BeginTransactionAsync();
+            var dataConnectionTransaction = await DataConnection.BeginTransactionAsync(cancellationToken);
             return new Linq2DbTransaction(dataConnectionTransaction);
         }
     }
