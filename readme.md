@@ -1,3 +1,7 @@
+# This repo is deprecated
+
+Please visit [Synnotech.Linq2Db](https://github.com/Synnotech-AG/Synnotech.Linq2Db) for the current implementation.
+
 # Synnotech.Linq2Db.MsSqlServer
 
 *Extensions for Linq2Db that target Microsoft SQL Server*
